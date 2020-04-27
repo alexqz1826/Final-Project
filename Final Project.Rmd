@@ -1,0 +1,181 @@
+---
+title: "Final Project"
+output: html_document
+name: "Alex Zhuang"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+### How to Maximize the Sales of a Video Game?
+
+Load packages and datasets
+```{r}
+library(DataComputing)
+library(ggplot2)
+library(party)
+vgsales = read.csv("vgsales.csv")
+vgsaleswr = read.csv("vgsaleswr.csv")
+consolesales = read.csv("console.csv")
+```
+
+## Introduction
+
+While looking for datasets, I discovered Kaggle, a site dedicated towards data science, featuring datasets created by its users. I was immediately attracted to the "Video Game Sales" dataset due to its tidyness, and the shear amount of cases and useful variables that it contains.
+
+The dataset "vgsales.csv" is a well formatted csv file that follows the rules of tidy data. It contains 11 variables, with each case representing a videogame and its sales since its release. The data is collected with a script through VGChartz, a website that collects sales of videogames.The data is sorted through the variable "Global_Sales" on default, which contains the total sales of a video game on one platform.
+
+After some further research, I've found the dataset "Video Game Sales With Ratings" that adds the rating of each video game to the Video Game Sales dataset, with the ratings being collected through metacritic. I've decided to include this dataset towards the project as the ratings will provide a rough preview into the quality of the games.
+
+The Video Game Sales dataset is loaded in the "vgsales" table while the set with ratings is loaded into the "vgsaleswr" table. The vgsales dataset will be used when the ratings are not needed to simplfy code and avoid clutter.
+
+In addition to the two main datasets, I found another dataset detailing the sales of various video game consoles, loaded as consolesales. As the "consoleID" column ofconsolesales have the same names for consoles with the "platform" column of vgsales, using the two datasets together will be very straightforward. 
+
+Nowadays, data science has been used more and more by companies to predict what products to create. This concept could be applied to videogames, where a game is to be created through analyzing sales data to maximize its sales. With the datasets, I wish to explore the question "How to Maximize the Sales of a Video Game?" through this project.
+
+An overview of the vgsales table:
+```{r}
+vgsales %>%
+  head(10)
+```
+
+
+## Early Exploration
+
+```{r}
+vgsales %>%
+  select(Name, Global_Sales) %>%
+  group_by(Name) %>%
+  summarize(Total_Sales = sum(Global_Sales)) %>%
+  arrange(desc(Total_Sales)) %>%
+  head(10)
+```
+As the original data set seperates games through their platforms, I wanted to see the most popular games when the sales of every version of a game is added together. The new dataset indicates that Wii Sports still leads by quite a large margin.
+
+```{r}
+Sale_plat <-
+  vgsales %>%
+  select(Name, Platform, Global_Sales) %>%
+  group_by(Name) %>%
+  mutate(Total_Sales = sum(Global_Sales)) %>%
+  arrange(desc(Total_Sales)) %>%
+  head(10)
+
+ggplot(data = Sale_plat, aes(x = Name, y =Global_Sales ,fill=Platform))+geom_bar(stat='identity',position='stack', width=.9) 
+```
+This graph shows the sales of each platform in relation to the total sales. Wii Sports is still the leading top seller depite it being only released on one platform, while Grand Theft Auto V is now second after counting sales from 5 platforms.
+
+```{r}
+Sale_NA <-
+  vgsales %>%
+  select(Name, Platform, NA_Sales) %>%
+  group_by(Name) %>%
+  mutate(Total_NA = sum(NA_Sales)) %>%
+  arrange(desc(Total_NA)) %>%
+  head(10)
+
+ggplot(data = Sale_NA, aes(x = Name, y = Total_NA, fill = Platform)) + 
+  geom_bar(stat = 'identity', position = 'stack', width = .9)
+```
+This plot shows the total sales of games when only North America is considered. Grand Theft Auto V is now the most popular game, overtaking Wii Sports, almost doubling its sales. Further investigation could be done on the difference in game popularity in different regions.
+
+```{r}
+vgsaleswr %>%
+ select(Name, Critic_Score) %>%
+  group_by(Name) %>%
+  summarise(avgScore = mean(Critic_Score, na.rm = TRUE)) %>%
+  arrange(desc(avgScore)) %>%
+  head(10)
+```
+The the top ten most critically aclaimed videogames (average score of all platforms). Through this examination, I've found that many games were missing data for the rating variables, especially older games. Only GTA V is in both the top ten critically aclaimed set and the top ten highest sales set.
+
+## Further Exploration
+```{r}
+SalesRegion <-
+  vgsales %>%
+  select(NA_Sales, EU_Sales, JP_Sales, Other_Sales, Global_Sales) %>%
+  mutate(tNA = sum(NA_Sales), 
+         tEU = sum(EU_Sales), 
+         tJP = sum(JP_Sales), 
+         tOT = sum(Other_Sales),
+         tGB = sum(Global_Sales)) %>%
+  group_by(tNA, tEU, tJP, tOT, tGB) %>%
+  summarise()
+
+row.names(SalesRegion) <- c("Sales")
+
+SalesRegion
+```
+The sales of video games in North America leads the other regions by far, accounting for almost half of the global sales, and almost doubling the sales from Europe. Due to the large impact of North America on sales, the trends of North American consumers are especially important.
+
+```{r}
+vgRatings <-
+  vgsaleswr %>%
+  select(Name, Critic_Score) %>%
+  group_by(Name) %>%
+  summarise(avgScore = mean(Critic_Score, na.rm = TRUE))
+
+vgTsales <-
+  vgsales %>%
+  select(Name, Global_Sales) %>%
+  group_by(Name) %>%
+  summarize(Total_Sales = sum(Global_Sales))
+
+vgRS <-
+  vgRatings %>%
+  left_join(vgTsales) %>%
+  na.omit() %>%
+  arrange(desc(Total_Sales))
+
+ggplot(data = vgRS, aes(x = Total_Sales, y = avgScore)) + 
+  geom_point() + 
+  stat_smooth(method = loess)
+```
+The relationship between the critic score of a game and its total sales. However, because the sales of Wii Sports and GTA V is a lot higher than the other games, the graph generated is extremely skewed.
+
+```{r}
+vgRSre <-
+  vgRS[-c(1,2),]
+
+ggplot(data = vgRSre, aes(x = Total_Sales, y = avgScore)) + 
+  geom_point() + 
+  stat_smooth(method = loess) 
+```
+To fix solve this problem, Wii Sports and GTA V is removed from the dataset as outliers. There is a trend of games with higher ratings corresponding to higher sales when the sales are below 15 million copies. However, this trend is removed as the sales further increase, with a slight trend of lower ratings corresponding to higher sales, though in the games with the highest sales, their ratings rarely drop below 75. This may be caused by name brand recognition being a more important factor for the games with the highest sales.
+
+```{r}
+vgRS %>%
+  head(10)
+```
+Every game in the top ten belongs in a famous franchise, such as Wii, Call of Duty, and Mario Bros. With the exception of GTA V, all games in the top ten sales have average to low critic ratings.
+
+```{r}
+gtasales <-
+  vgsales %>%
+  filter(grepl("Grand Theft Auto", Name, ignore.case = TRUE)) %>%
+  group_by(Name) %>%
+  mutate(total_sales = sum(Global_Sales)) %>%
+  arrange(desc(Year))
+
+ggplot(data = gtasales,aes(x = Year, y = Global_Sales)) + geom_point(aes(color = Platform, size = Global_Sales))
+```
+The Grand Theft Auto franchise is selected to examine the sales figures of a popular franchise. The plot shows that the franchise became very successful soon after its first two iterations. With most of its sales coming from the PlayStation series of consoles, while sales from the X Box series of consoles slowly grew through time. 
+
+```{r}
+platratsales <- 
+  vgsaleswr %>%
+  filter(Platform == "PC" | Platform == "PS4" | Platform == "XOne") %>%
+  ctree(Global_Sales ~ Platform + Rating, 
+        data = .)
+
+plot(platratsales, type = "simple")
+```
+This plot exmines the relationships bewteen the platform and rating of a game with the use of machine learning. Discontinued platforms are removed from the dataset, leaving only the PC, X Box One, and PS4. Despite the fewest games being produced with a M rating, it yields the highest sales. X Box and PS4 sales are higher than PC in general regardless of rating.
+
+## Conclusion
+
+From examining the dataset, it was found that North American consumers have the highest impact on sales, this means that the trends and tastes of NA consumers should be prioritized when developing a video game with sales in mind. Critical ratings of video games are important for independent games and establishing new franchises, while games from established franchises are not affected from critical ratings. Devlopment should prioritize the PlayStation and X Box variants of a game as they sell more compared to their PC counterparts. M rated games sell the most despite their low production and inaccessability.
+
